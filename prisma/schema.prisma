@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============ MULTI-CABANG ============
+
+model Toko {
+  id        String   @id @default(cuid())
+  nama      String
+  alamat    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users            User[]
+  barang           Barang[]
+  hargaEmasHarian  HargaEmasHarian[]
+
+  @@map("toko")
+}
+
+// ============ USER / KASIR ============
+
+enum Role {
+  ADMIN
+  KASIR
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nama      String
+  role      Role     @default(KASIR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tokoId String
+  toko   Toko   @relation(fields: [tokoId], references: [id])
+
+  @@index([tokoId])
+  @@map("users")
+}
+
+// ============ MASTER BARANG ============
+
+enum JenisBarang {
+  PERHIASAN
+  BATANGAN
+}
+
+model Barang {
+  id          String      @id @default(cuid())
+  kodeBarang  String      @unique
+  nama        String
+  jenis       JenisBarang
+  karat       Int         // 24, 22, 18, 14, 10
+  kadar       Float       // desimal, contoh 0.916 untuk 22K
+  beratGram   Float
+  ongkosKerja Float       @default(0) // upah/ongkos kerja, khusus perhiasan
+  stok        Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  tokoId String
+  toko   Toko   @relation(fields: [tokoId], references: [id])
+
+  @@index([tokoId])
+  @@map("barang")
+}
+
+// ============ HARGA EMAS HARIAN ============
+
+model HargaEmasHarian {
+  id            String   @id @default(cuid())
+  tanggal       DateTime @default(now())
+  hargaPerGram  Float    // harga emas 24K per gram, dalam Rupiah
+  createdAt     DateTime @default(now())
+
+  tokoId String
+  toko   Toko   @relation(fields: [tokoId], references: [id])
+
+  @@unique([tokoId, tanggal])
+  @@index([tokoId])
+  @@map("harga_emas_harian")
+}
+
+// ============ TABEL REFERENSI BERAT JENIS -> KADAR ============
+// Sumber: buku referensi fisik toko (kolom Cu=0, Ag=100)
+// Dipakai untuk lookup kadar emas dari hasil ukur berat jenis (Bj)
+
+model ReferensiKadar {
+  id           String @id @default(cuid())
+  bj           Float  @unique // Berat jenis (S.G/B.J), contoh 14.65
+  kadarPersen  Float  // Kadar emas dalam persen, contoh 72.76
+
+  @@index([bj])
+  @@map("referensi_kadar")
+}

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Kode auto-generated oleh Prisma, bukan kode yang kita tulis:
+    "generated/**",
   ]),
 ]);
 

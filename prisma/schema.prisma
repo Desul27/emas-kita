@@ -13,12 +13,15 @@ model Toko {
   id        String   @id @default(cuid())
   nama      String
   alamat    String?
+  mataUang  String   @default("IDR")
+  tema      String   @default("light")
+  bahasa    String   @default("id")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users            User[]
-  barang           Barang[]
-  hargaEmasHarian  HargaEmasHarian[]
+  users           User[]
+  hargaEmasHarian HargaEmasHarian[]
+  transaksi       Transaksi[]
 
   @@map("toko")
 }
@@ -45,40 +48,13 @@ model User {
   @@map("users")
 }
 
-// ============ MASTER BARANG ============
-
-enum JenisBarang {
-  PERHIASAN
-  BATANGAN
-}
-
-model Barang {
-  id          String      @id @default(cuid())
-  kodeBarang  String      @unique
-  nama        String
-  jenis       JenisBarang
-  karat       Int         // 24, 22, 18, 14, 10
-  kadar       Float       // desimal, contoh 0.916 untuk 22K
-  beratGram   Float
-  ongkosKerja Float       @default(0) // upah/ongkos kerja, khusus perhiasan
-  stok        Int         @default(0)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  tokoId String
-  toko   Toko   @relation(fields: [tokoId], references: [id])
-
-  @@index([tokoId])
-  @@map("barang")
-}
-
 // ============ HARGA EMAS HARIAN ============
 
 model HargaEmasHarian {
-  id            String   @id @default(cuid())
-  tanggal       DateTime @default(now())
-  hargaPerGram  Float    // harga emas 24K per gram, dalam Rupiah
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  tanggal      DateTime @default(now())
+  hargaPerGram Float
+  createdAt    DateTime @default(now())
 
   tokoId String
   toko   Toko   @relation(fields: [tokoId], references: [id])
@@ -90,13 +66,38 @@ model HargaEmasHarian {
 
 // ============ TABEL REFERENSI BERAT JENIS -> KADAR ============
 // Sumber: buku referensi fisik toko (kolom Cu=0, Ag=100)
-// Dipakai untuk lookup kadar emas dari hasil ukur berat jenis (Bj)
 
 model ReferensiKadar {
-  id           String @id @default(cuid())
-  bj           Float  @unique // Berat jenis (S.G/B.J), contoh 14.65
-  kadarPersen  Float  // Kadar emas dalam persen, contoh 72.76
+  id          String @id @default(cuid())
+  bj          Float  @unique
+  kadarPersen Float
 
   @@index([bj])
   @@map("referensi_kadar")
+}
+
+// ============ TRANSAKSI ============
+// Toko HANYA membeli kepingan emas dari pelanggan (bukan jual barang katalog).
+// Setiap kedatangan pelanggan = 1 transaksi. "Stok" dihitung dari SUM
+// beratKering, bukan angka terpisah yang disimpan manual.
+
+model Transaksi {
+  id            String   @id @default(cuid())
+  kodeTransaksi String   @unique
+  tanggal       DateTime @default(now())
+
+  beratKering  Float // Bk
+  beratBasah   Float // Bb
+  bj           Float // Bj = Bk / (Bk - Bb)
+  kadarPersen  Float // Kd
+  hargaPerGram Float // Hp
+  totalHarga   Float // Th = Bk x Kd x Hp
+
+  namaPelanggan String?
+
+  tokoId String
+  toko   Toko   @relation(fields: [tokoId], references: [id])
+
+  @@index([tokoId, tanggal])
+  @@map("transaksi")
 }

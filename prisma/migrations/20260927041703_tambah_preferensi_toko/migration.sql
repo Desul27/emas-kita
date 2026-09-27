@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "toko" ADD COLUMN     "bahasa" TEXT NOT NULL DEFAULT 'id',
+ADD COLUMN     "mataUang" TEXT NOT NULL DEFAULT 'IDR',
+ADD COLUMN     "tema" TEXT NOT NULL DEFAULT 'light';

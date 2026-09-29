@@ -16,6 +16,14 @@ model Toko {
   mataUang  String   @default("IDR")
   tema      String   @default("light")
   bahasa    String   @default("id")
+
+  // Aturan kalkulator (mode "default" = semua aturan standar aktif,
+  // mode "kustom" = ikut tiga flag di bawah)
+  modeKalkulator      String  @default("default")
+  bulatkanBeratKering Boolean @default(true)
+  bulatkanKadar       Boolean @default(true)
+  cetakStruk          Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -86,12 +94,14 @@ model Transaksi {
   kodeTransaksi String   @unique
   tanggal       DateTime @default(now())
 
-  beratKering  Float // Bk
-  beratBasah   Float // Bb
-  bj           Float // Bj = Bk / (Bk - Bb)
-  kadarPersen  Float // Kd
-  hargaPerGram Float // Hp
-  totalHarga   Float // Th = Bk x Kd x Hp
+  beratKeringAsli Float // Bk hasil timbangan, sebelum pembulatan (audit)
+  beratKering     Float // Bk yang dipakai untuk hitung Th (sesudah aturan pembulatan)
+  beratBasah      Float // Bb
+  bj              Float // Bj = Bk / (Bk - Bb), selalu dari angka asli
+  kadarAsli       Float // Kd hasil lookup tabel referensi, sebelum pembulatan (audit)
+  kadarPersen     Float // Kd yang dipakai untuk hitung Th (sesudah aturan pembulatan)
+  hargaPerGram    Float // Hp efektif = harga harian x kadarPersen
+  totalHarga      Float // Th = beratKering x hargaPerGram
 
   namaPelanggan String?
 

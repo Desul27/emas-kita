@@ -5,6 +5,7 @@ import {
   kalkulasiLengkap,
   type KalkulasiLengkapResult,
 } from "@/lib/gold-bj-calculator";
+import { aturanEfektif, type AturanEfektif } from "@/lib/aturan-kalkulator";
 
 // ============ TOKO ============
 
@@ -48,6 +49,22 @@ export async function ambilHargaTerbaru(
   return { hargaPerGram: row.hargaPerGram, tanggal: row.tanggal };
 }
 
+// ============ ATURAN KALKULATOR (diatur di halaman Preferensi) ============
+
+async function muatAturan(tokoId: string): Promise<AturanEfektif> {
+  const toko = await prisma.toko.findUnique({
+    where: { id: tokoId },
+    select: {
+      modeKalkulator: true,
+      bulatkanBeratKering: true,
+      bulatkanKadar: true,
+      cetakStruk: true,
+    },
+  });
+  if (!toko) throw new Error("Toko tidak ditemukan");
+  return aturanEfektif(toko);
+}
+
 // ============ KALKULASI (tanpa simpan) ============
 
 export interface HitungInput {
@@ -80,11 +97,13 @@ export async function hitungKalkulatorBj(
       return { ok: false, error: "Tabel referensi kadar belum ada isinya." };
     }
 
+    const aturan = await muatAturan(input.tokoId);
     const hasil = kalkulasiLengkap({
       beratKering: input.beratKering,
       beratBasah: input.beratBasah,
       hargaEmasHarian: harga.hargaPerGram,
       referensi,
+      aturan,
     });
 
     return { ok: true, data: hasil };
@@ -130,7 +149,13 @@ export interface SimpanTransaksiInput {
 }
 
 export type SimpanTransaksiResult =
-  | { ok: true; kodeTransaksi: string; data: KalkulasiLengkapResult }
+  | {
+      ok: true;
+      kodeTransaksi: string;
+      tanggal: string; // ISO
+      data: KalkulasiLengkapResult;
+      cetakStruk: boolean;
+    }
   | { ok: false; error: string };
 
 export async function simpanTransaksi(
@@ -153,11 +178,13 @@ export async function simpanTransaksi(
       return { ok: false, error: "Tabel referensi kadar belum ada isinya." };
     }
 
+    const aturan = await muatAturan(input.tokoId);
     const hasil = kalkulasiLengkap({
       beratKering: input.beratKering,
       beratBasah: input.beratBasah,
       hargaEmasHarian: harga.hargaPerGram,
       referensi,
+      aturan,
     });
 
     const sekarang = new Date();
@@ -167,9 +194,11 @@ export async function simpanTransaksi(
       data: {
         kodeTransaksi,
         tanggal: sekarang,
-        beratKering: input.beratKering,
+        beratKeringAsli: hasil.beratKeringAsli,
+        beratKering: hasil.beratKering, // sesudah pembulatan
         beratBasah: input.beratBasah,
         bj: hasil.bj,
+        kadarAsli: hasil.kadarAsli,
         kadarPersen: hasil.kadarPersen,
         hargaPerGram: hasil.hargaPerGramEfektif,
         totalHarga: hasil.totalHarga,
@@ -178,7 +207,13 @@ export async function simpanTransaksi(
       },
     });
 
-    return { ok: true, kodeTransaksi, data: hasil };
+    return {
+      ok: true,
+      kodeTransaksi,
+      tanggal: sekarang.toISOString(),
+      data: hasil,
+      cetakStruk: aturan.cetakStruk,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan";
     return { ok: false, error: message };

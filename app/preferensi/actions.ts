@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import type { AturanTersimpan } from "@/lib/aturan-kalkulator";
 
 export interface PreferensiToko {
   mataUang: string;
@@ -63,6 +64,46 @@ export async function simpanHargaHariIni(
       },
     });
 
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Terjadi kesalahan";
+    return { ok: false, error: message };
+  }
+}
+
+// ============ ATURAN KALKULATOR ============
+
+export async function ambilAturanKalkulator(
+  tokoId: string
+): Promise<AturanTersimpan | null> {
+  return prisma.toko.findUnique({
+    where: { id: tokoId },
+    select: {
+      modeKalkulator: true,
+      bulatkanBeratKering: true,
+      bulatkanKadar: true,
+      cetakStruk: true,
+    },
+  });
+}
+
+export async function simpanAturanKalkulator(
+  tokoId: string,
+  data: AturanTersimpan
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (data.modeKalkulator !== "default" && data.modeKalkulator !== "kustom") {
+      return { ok: false, error: "Mode kalkulator tidak dikenal" };
+    }
+    await prisma.toko.update({
+      where: { id: tokoId },
+      data: {
+        modeKalkulator: data.modeKalkulator,
+        bulatkanBeratKering: data.bulatkanBeratKering,
+        bulatkanKadar: data.bulatkanKadar,
+        cetakStruk: data.cetakStruk,
+      },
+    });
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan";

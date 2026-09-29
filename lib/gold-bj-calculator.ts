@@ -53,16 +53,41 @@ export function cariKadarDariBj(
   throw new Error("Gagal menemukan kadar untuk nilai Bj: " + bj);
 }
 
+export interface AturanHitung {
+  bulatkanBeratKering: boolean;
+  bulatkanKadar: boolean;
+}
+
+/**
+ * Berat kering dibulatkan ke bawah, 1 desimal (10,87 -> 10,8).
+ * Epsilon kecil menahan galat floating point (mis. 4.6 * 10 = 45.99999...).
+ */
+export function bulatkanBeratKeringKeBawah(beratKering: number): number {
+  return Math.floor(beratKering * 10 + 1e-9) / 10;
+}
+
+/**
+ * Kadar <= 10% dibulatkan ke bawah ke bilangan bulat (9,6 -> 9).
+ * Kadar di atas 10% tidak diubah.
+ */
+export function bulatkanKadarKeBawah(kadarPersen: number): number {
+  return kadarPersen <= 10 ? Math.floor(kadarPersen + 1e-9) : kadarPersen;
+}
+
 export interface KalkulasiLengkapInput {
   beratKering: number;
   beratBasah: number;
   hargaEmasHarian: number; // harga dasar 24K per gram, dari Preferensi
   referensi: ReferensiKadarRow[];
+  aturan: AturanHitung;
 }
 
 export interface KalkulasiLengkapResult {
-  bj: number;
-  kadarPersen: number;
+  bj: number; // selalu dihitung dari berat asli timbangan
+  beratKeringAsli: number; // hasil timbangan
+  beratKering: number; // yang dipakai (sesudah aturan pembulatan)
+  kadarAsli: number; // hasil lookup tabel
+  kadarPersen: number; // yang dipakai (sesudah aturan pembulatan)
   hargaPerGramEfektif: number; // hargaEmasHarian x kadar
   totalHarga: number; // beratKering x hargaPerGramEfektif
 }
@@ -72,11 +97,33 @@ export function kalkulasiLengkap({
   beratBasah,
   hargaEmasHarian,
   referensi,
+  aturan,
 }: KalkulasiLengkapInput): KalkulasiLengkapResult {
+  // Bj memakai berat asli; pembulatan baru dipakai sesudahnya
   const bj = hitungBj({ beratKering, beratBasah });
-  const kadarPersen = cariKadarDariBj(bj, referensi);
-  const hargaPerGramEfektif = hargaEmasHarian * (kadarPersen / 100);
-  const totalHarga = beratKering * hargaPerGramEfektif;
+  const kadarAsli = cariKadarDariBj(bj, referensi);
 
-  return { bj, kadarPersen, hargaPerGramEfektif, totalHarga };
+  const beratDipakai = aturan.bulatkanBeratKering
+    ? bulatkanBeratKeringKeBawah(beratKering)
+    : beratKering;
+  const kadarDipakai = aturan.bulatkanKadar
+    ? bulatkanKadarKeBawah(kadarAsli)
+    : kadarAsli;
+
+  if (beratDipakai <= 0) {
+    throw new Error("Berat kering menjadi 0 setelah pembulatan");
+  }
+
+  const hargaPerGramEfektif = hargaEmasHarian * (kadarDipakai / 100);
+  const totalHarga = beratDipakai * hargaPerGramEfektif;
+
+  return {
+    bj,
+    beratKeringAsli: beratKering,
+    beratKering: beratDipakai,
+    kadarAsli,
+    kadarPersen: kadarDipakai,
+    hargaPerGramEfektif,
+    totalHarga,
+  };
 }

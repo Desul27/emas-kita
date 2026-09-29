@@ -11,8 +11,56 @@ import {
   type TokoRow,
 } from "@/app/kalkulator/actions";
 import type { KalkulasiLengkapResult } from "@/lib/gold-bj-calculator";
+import Struk, { type StrukProps } from "../components/Struk";
 
 const NILAI_AWAL = { beratKering: "", beratBasah: "", namaPelanggan: "" };
+
+const formatRupiah = (n: number) =>
+  new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0,
+  }).format(n);
+
+function RingkasanHasil({
+  hasil,
+  namaPelanggan,
+}: {
+  hasil: KalkulasiLengkapResult;
+  namaPelanggan: string;
+}) {
+  const beratBeda = hasil.beratKering !== hasil.beratKeringAsli;
+  const kadarBeda = hasil.kadarPersen !== hasil.kadarAsli;
+
+  return (
+    <>
+      <div>
+        <p className="muted">Berat kering</p>
+        <p className="font-medium">{hasil.beratKering} gram</p>
+        {beratBeda && <p className="muted">Timbangan: {hasil.beratKeringAsli} gram</p>}
+      </div>
+      <div>
+        <p className="muted">Kadar</p>
+        <p className="font-medium">{hasil.kadarPersen.toFixed(2)}%</p>
+        {kadarBeda && <p className="muted">Tabel: {hasil.kadarAsli.toFixed(2)}%</p>}
+      </div>
+      <div>
+        <p className="muted">Harga emas per gram</p>
+        <p className="font-medium">{formatRupiah(hasil.hargaPerGramEfektif)}</p>
+      </div>
+      <div>
+        <p className="muted">Total harga</p>
+        <p className="text-2xl font-semibold">{formatRupiah(hasil.totalHarga)}</p>
+      </div>
+      {namaPelanggan && (
+        <div>
+          <p className="muted">Nama pelanggan</p>
+          <p className="font-medium">{namaPelanggan}</p>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function GoldCalculatorBJ() {
   const [daftarToko, setDaftarToko] = useState<TokoRow[]>([]);
@@ -28,12 +76,11 @@ export default function GoldCalculatorBJ() {
 
   const [hasil, setHasil] = useState<KalkulasiLengkapResult | null>(null);
   const [kodeTersimpan, setKodeTersimpan] = useState<string | null>(null);
+  const [strukData, setStrukData] = useState<StrukProps | null>(null);
+  const [cetakOtomatis, setCetakOtomatis] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const formatRupiah = (n: number) =>
-    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 
   useEffect(() => {
     startTransition(async () => {
@@ -57,6 +104,11 @@ export default function GoldCalculatorBJ() {
     muatHargaDanStok(tokoId);
   }, [tokoId]);
 
+  // Cetak otomatis (kalau aturannya aktif) begitu struk sudah tampil di DOM
+  useEffect(() => {
+    if (strukData && cetakOtomatis) window.print();
+  }, [strukData, cetakOtomatis]);
+
   const handleBuatToko = () => {
     setError(null);
     startTransition(async () => {
@@ -77,6 +129,8 @@ export default function GoldCalculatorBJ() {
     setNamaPelanggan(NILAI_AWAL.namaPelanggan);
     setHasil(null);
     setKodeTersimpan(null);
+    setStrukData(null);
+    setCetakOtomatis(false);
     setError(null);
   };
 
@@ -108,11 +162,24 @@ export default function GoldCalculatorBJ() {
     setError(null);
     const bk = parseFloat(beratKering);
     const bb = parseFloat(beratBasah);
+    const namaToko = daftarToko.find((t) => t.id === tokoId)?.nama ?? "Emas Kita";
 
     startTransition(async () => {
       const res = await simpanTransaksi({ tokoId, beratKering: bk, beratBasah: bb, namaPelanggan });
       if (res.ok) {
+        setHasil(res.data);
         setKodeTersimpan(res.kodeTransaksi);
+        setStrukData({
+          namaToko,
+          kodeTransaksi: res.kodeTransaksi,
+          tanggal: res.tanggal,
+          namaPelanggan: namaPelanggan.trim() || undefined,
+          beratKering: res.data.beratKering,
+          kadarPersen: res.data.kadarPersen,
+          hargaPerGram: res.data.hargaPerGramEfektif,
+          totalHarga: res.data.totalHarga,
+        });
+        setCetakOtomatis(res.cetakStruk);
         muatHargaDanStok(tokoId);
       } else {
         setError(res.error);
@@ -121,25 +188,26 @@ export default function GoldCalculatorBJ() {
   };
 
   return (
-    <div className="max-w-sm mx-auto p-4 space-y-4 text-gray-900">
+    <div className="mx-auto max-w-sm space-y-4 p-4">
       {daftarToko.length === 0 && !isPending && (
-        <div className="border rounded p-4 space-y-2 bg-white">
-          <p className="text-sm text-gray-600">Belum ada toko. Buat dulu:</p>
-          <input type="text" placeholder="Nama toko" value={namaTokoBaru}
+        <div className="card space-y-2">
+          <p className="muted">Belum ada toko. Buat dulu:</p>
+          <input
+            type="text"
+            placeholder="Nama toko"
+            value={namaTokoBaru}
             onChange={(e) => setNamaTokoBaru(e.target.value)}
-            className="w-full border rounded px-3 py-2 bg-white text-gray-900" />
-          <button onClick={handleBuatToko} className="w-full bg-black text-white rounded py-2">
-            Buat toko
-          </button>
+            className="field"
+          />
+          <button onClick={handleBuatToko} className="btn-primary">Buat toko</button>
         </div>
       )}
 
       {daftarToko.length > 0 && (
         <>
           <div>
-            <label className="block text-sm mb-1 text-gray-700">Toko</label>
-            <select value={tokoId} onChange={(e) => setTokoId(e.target.value)}
-              className="w-full border rounded px-3 py-2 bg-white text-gray-900">
+            <label className="label">Toko</label>
+            <select value={tokoId} onChange={(e) => setTokoId(e.target.value)} className="field">
               {daftarToko.map((t) => (
                 <option key={t.id} value={t.id}>{t.nama}</option>
               ))}
@@ -147,22 +215,22 @@ export default function GoldCalculatorBJ() {
           </div>
 
           <div>
-            <label className="block text-sm mb-1 text-gray-700">Harga emas hari ini (per gram, 24K)</label>
+            <label className="label">Harga emas hari ini (per gram, 24K)</label>
             <input
               type="text"
               readOnly
               value={hargaHariIni !== null ? formatRupiah(hargaHariIni) : "Belum diset"}
-              className="w-full border rounded px-3 py-2 bg-gray-100 text-gray-600 cursor-not-allowed"
+              className="field field-readonly"
             />
             {hargaHariIni === null && (
-              <p className="text-xs text-red-700 mt-1">
+              <p className="mt-1 text-xs text-red-700 dark:text-red-400">
                 Set harga dulu di halaman Preferensi sebelum transaksi.
               </p>
             )}
           </div>
 
           {stok && (
-            <p className="text-sm text-gray-600">
+            <p className="muted">
               Stok terkumpul hari ini: {stok.totalGram.toFixed(2)} gram ({stok.jumlahTransaksi} transaksi)
             </p>
           )}
@@ -170,95 +238,62 @@ export default function GoldCalculatorBJ() {
           {!kodeTersimpan && (
             <>
               <div>
-                <label className="block text-sm mb-1 text-gray-700">Berat kering (Bk) - gram</label>
-                <input type="number" step={0.01} value={beratKering}
+                <label className="label">Berat kering (Bk) - gram</label>
+                <input
+                  type="number"
+                  step={0.01}
+                  value={beratKering}
                   onChange={(e) => setBeratKering(e.target.value)}
-                  className="w-full border rounded px-3 py-2 bg-white text-gray-900" />
+                  className="field"
+                />
               </div>
 
               <div>
-                <label className="block text-sm mb-1 text-gray-700">Berat basah (Bb) - gram</label>
-                <input type="number" step={0.01} value={beratBasah}
+                <label className="label">Berat basah (Bb) - gram</label>
+                <input
+                  type="number"
+                  step={0.01}
+                  value={beratBasah}
                   onChange={(e) => setBeratBasah(e.target.value)}
-                  className="w-full border rounded px-3 py-2 bg-white text-gray-900" />
+                  className="field"
+                />
               </div>
 
               <div>
-                <label className="block text-sm mb-1 text-gray-700">Nama/ID pelanggan</label>
-                <input type="text" value={namaPelanggan}
+                <label className="label">Nama/ID pelanggan</label>
+                <input
+                  type="text"
+                  value={namaPelanggan}
                   onChange={(e) => setNamaPelanggan(e.target.value)}
-                  className="w-full border rounded px-3 py-2 bg-white text-gray-900" />
+                  className="field"
+                />
               </div>
 
-              <button onClick={handleHitung} disabled={isPending}
-                className="w-full bg-gray-200 text-gray-900 rounded py-2 disabled:opacity-50">
+              <button onClick={handleHitung} disabled={isPending} className="btn-secondary">
                 Hitung
               </button>
             </>
           )}
 
           {hasil && !kodeTersimpan && (
-            <div className="bg-gray-100 rounded p-4 space-y-2 text-gray-900">
-              <div>
-                <p className="text-sm text-gray-600">Berat kering</p>
-                <p className="font-medium text-gray-900">{parseFloat(beratKering)} gram</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Kadar</p>
-                <p className="font-medium text-gray-900">{hasil.kadarPersen.toFixed(2)}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Harga emas per gram</p>
-                <p className="font-medium text-gray-900">{formatRupiah(hasil.hargaPerGramEfektif)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total harga</p>
-                <p className="text-2xl font-semibold text-gray-900">{formatRupiah(hasil.totalHarga)}</p>
-              </div>
-              {namaPelanggan && (
-                <div>
-                  <p className="text-sm text-gray-600">Nama pelanggan</p>
-                  <p className="font-medium text-gray-900">{namaPelanggan}</p>
-                </div>
-              )}
-
-              <button onClick={handleSimpanTransaksi} disabled={isPending}
-                className="w-full bg-black text-white rounded py-2 disabled:opacity-50">
+            <div className="result-box space-y-2">
+              <RingkasanHasil hasil={hasil} namaPelanggan={namaPelanggan} />
+              <button onClick={handleSimpanTransaksi} disabled={isPending} className="btn-primary">
                 {isPending ? "Menyimpan..." : "Simpan sebagai transaksi"}
               </button>
             </div>
           )}
 
           {kodeTersimpan && hasil && (
-            <div className="bg-green-50 rounded p-4 space-y-2">
-              <p className="text-green-800 text-sm">
+            <div className="result-success space-y-2">
+              <p className="text-sm text-green-800 dark:text-green-300">
                 Transaksi tersimpan: <strong>{kodeTersimpan}</strong>
               </p>
-              <div>
-                <p className="text-sm text-gray-600">Berat kering</p>
-                <p className="font-medium text-gray-900">{parseFloat(beratKering)} gram</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Kadar</p>
-                <p className="font-medium text-gray-900">{hasil.kadarPersen.toFixed(2)}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Harga emas per gram</p>
-                <p className="font-medium text-gray-900">{formatRupiah(hasil.hargaPerGramEfektif)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Total harga</p>
-                <p className="text-2xl font-semibold text-gray-900">{formatRupiah(hasil.totalHarga)}</p>
-              </div>
-              {namaPelanggan && (
-                <div>
-                  <p className="text-sm text-gray-600">Nama pelanggan</p>
-                  <p className="font-medium text-gray-900">{namaPelanggan}</p>
-                </div>
-              )}
-
-              <button onClick={resetForm}
-                className="w-full bg-black text-white rounded py-2">
+              <RingkasanHasil hasil={hasil} namaPelanggan={namaPelanggan} />
+              <button onClick={() => window.print()} className="btn-secondary">
+                Cetak struk
+              </button>
+              <button onClick={resetForm} className="btn-primary">
                 Tambah transaksi
               </button>
             </div>
@@ -266,7 +301,9 @@ export default function GoldCalculatorBJ() {
         </>
       )}
 
-      {error && <div className="bg-red-50 text-red-800 text-sm rounded p-3">{error}</div>}
+      {error && <div className="alert-error">{error}</div>}
+
+      {strukData && <Struk {...strukData} />}
     </div>
   );
 }

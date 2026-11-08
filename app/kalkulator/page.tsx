@@ -1,6 +1,8 @@
 import GoldCalculatorBJ from "../components/GoldCalculatorBJ";
+import { wajibPemilikHalaman } from "@/lib/auth/guard";
 
-export default function KalkulatorPage() {
+export default async function KalkulatorPage() {
+  await wajibPemilikHalaman();
   return (
     <main className="min-h-screen py-10">
       <h1 className="text-xl font-semibold text-center mb-2">

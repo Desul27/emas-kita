@@ -2,6 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import type { AturanTersimpan } from "@/lib/aturan-kalkulator";
+import { pastikanTokoMilik, wajibPemilik } from "@/lib/auth/guard";
+
+/** Login + kepemilikan toko. Melempar error kalau tidak berhak. */
+async function izinToko(tokoId: string): Promise<void> {
+  const pengguna = await wajibPemilik();
+  await pastikanTokoMilik(pengguna.id, tokoId);
+}
 
 export interface PreferensiToko {
   mataUang: string;
@@ -12,6 +19,7 @@ export interface PreferensiToko {
 export async function ambilPreferensiToko(
   tokoId: string
 ): Promise<PreferensiToko | null> {
+  await izinToko(tokoId);
   const toko = await prisma.toko.findUnique({
     where: { id: tokoId },
     select: { mataUang: true, tema: true, bahasa: true },
@@ -24,6 +32,7 @@ export async function simpanPreferensiToko(
   data: PreferensiToko
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    await izinToko(tokoId);
     await prisma.toko.update({
       where: { id: tokoId },
       data: {
@@ -48,6 +57,7 @@ export async function simpanHargaHariIni(
   input: SimpanHargaInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    await izinToko(input.tokoId);
     if (input.hargaPerGram <= 0) {
       return { ok: false, error: "Harga per gram harus lebih besar dari 0" };
     }
@@ -76,6 +86,7 @@ export async function simpanHargaHariIni(
 export async function ambilAturanKalkulator(
   tokoId: string
 ): Promise<AturanTersimpan | null> {
+  await izinToko(tokoId);
   return prisma.toko.findUnique({
     where: { id: tokoId },
     select: {
@@ -92,6 +103,7 @@ export async function simpanAturanKalkulator(
   data: AturanTersimpan
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
+    await izinToko(tokoId);
     if (data.modeKalkulator !== "default" && data.modeKalkulator !== "kustom") {
       return { ok: false, error: "Mode kalkulator tidak dikenal" };
     }

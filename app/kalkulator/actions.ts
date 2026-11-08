@@ -6,6 +6,7 @@ import {
   type KalkulasiLengkapResult,
 } from "@/lib/gold-bj-calculator";
 import { aturanEfektif, type AturanEfektif } from "@/lib/aturan-kalkulator";
+import { pastikanTokoMilik, wajibPemilik } from "@/lib/auth/guard";
 
 // ============ TOKO ============
 
@@ -15,18 +16,21 @@ export interface TokoRow {
 }
 
 export async function ambilDaftarToko(): Promise<TokoRow[]> {
+  const pengguna = await wajibPemilik();
   return prisma.toko.findMany({
+    where: { ownerId: pengguna.id },
     select: { id: true, nama: true },
     orderBy: { nama: "asc" },
   });
 }
 
 export async function buatToko(nama: string): Promise<TokoRow> {
+  const pengguna = await wajibPemilik();
   if (!nama.trim()) {
     throw new Error("Nama toko tidak boleh kosong");
   }
   return prisma.toko.create({
-    data: { nama: nama.trim() },
+    data: { nama: nama.trim(), ownerId: pengguna.id },
     select: { id: true, nama: true },
   });
 }
@@ -41,6 +45,8 @@ export interface HargaTerbaru {
 export async function ambilHargaTerbaru(
   tokoId: string
 ): Promise<HargaTerbaru | null> {
+  const pengguna = await wajibPemilik();
+  await pastikanTokoMilik(pengguna.id, tokoId);
   const row = await prisma.hargaEmasHarian.findFirst({
     where: { tokoId },
     orderBy: { tanggal: "desc" },
@@ -51,6 +57,7 @@ export async function ambilHargaTerbaru(
 
 // ============ ATURAN KALKULATOR (diatur di halaman Preferensi) ============
 
+// Pemanggil wajib sudah memastikan toko milik pengguna.
 async function muatAturan(tokoId: string): Promise<AturanEfektif> {
   const toko = await prisma.toko.findUnique({
     where: { id: tokoId },
@@ -81,6 +88,7 @@ export async function hitungKalkulatorBj(
   input: HitungInput
 ): Promise<HitungResult> {
   try {
+    // ambilHargaTerbaru sudah memeriksa login + kepemilikan toko
     const harga = await ambilHargaTerbaru(input.tokoId);
     if (!harga) {
       return {
@@ -162,6 +170,7 @@ export async function simpanTransaksi(
   input: SimpanTransaksiInput
 ): Promise<SimpanTransaksiResult> {
   try {
+    // ambilHargaTerbaru sudah memeriksa login + kepemilikan toko
     const harga = await ambilHargaTerbaru(input.tokoId);
     if (!harga) {
       return {
@@ -228,6 +237,8 @@ export interface StokHariIni {
 }
 
 export async function ambilStokHariIni(tokoId: string): Promise<StokHariIni> {
+  const pengguna = await wajibPemilik();
+  await pastikanTokoMilik(pengguna.id, tokoId);
   const awalHari = new Date();
   awalHari.setHours(0, 0, 0, 0);
   const akhirHari = new Date(awalHari);

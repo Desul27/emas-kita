@@ -27,33 +27,62 @@ model Toko {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           User[]
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
   hargaEmasHarian HargaEmasHarian[]
   transaksi       Transaksi[]
 
+  @@index([ownerId])
   @@map("toko")
 }
 
-// ============ USER / KASIR ============
+// ============ AKUN & SESI ============
+// SUPER_ADMIN : pengelola sistem (login email/username + kata sandi)
+// PEMILIK_TOKO: pemilik usaha (login username + PIN 6 digit), dibuat oleh Super Admin
 
 enum Role {
-  ADMIN
-  KASIR
+  SUPER_ADMIN
+  PEMILIK_TOKO
+}
+
+enum StatusAkun {
+  AKTIF
+  DITUTUP // akses dashboard ditutup oleh Super Admin
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  nama      String
-  role      Role     @default(KASIR)
+  id           String     @id @default(cuid())
+  username     String     @unique // huruf kecil
+  email        String?    @unique // wajib untuk SUPER_ADMIN (ganti kata sandi), opsional untuk lainnya
+  nama         String
+  role         Role       @default(PEMILIK_TOKO)
+  status       StatusAkun @default(AKTIF)
+  passwordHash String // hash PIN / kata sandi (scrypt + pepper)
+
+  // Anti brute force
+  gagalLogin     Int       @default(0)
+  terkunciSampai DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tokoId String
-  toko   Toko   @relation(fields: [tokoId], references: [id])
+  sesi Sesi[]
+  toko Toko[]
 
-  @@index([tokoId])
   @@map("users")
+}
+
+model Sesi {
+  id            String   @id // SHA-256 dari token di cookie
+  userId        String
+  berlakuSampai DateTime
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sesi")
 }
 
 // ============ HARGA EMAS HARIAN ============
